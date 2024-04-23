@@ -3,7 +3,6 @@ import pygame, sys
 from pygame.locals import *
 import random
 import time
-import spritesheet
  
 pygame.init()
  
