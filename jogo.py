@@ -64,6 +64,9 @@ class Enemy(Element):
 		self.lastNode = (1,1)
 
 		self.speed = random.randint(2,4) #pixels per frame
+		
+	def getNodePos(self):
+		return self.lastNode
 
 	def isSafeNode(self, x, y):
 		if x < 0 or x >= len(MAP):
@@ -144,6 +147,7 @@ class Player(Enemy):
 		super().__init__("player.png") 
 		self.direction = "UP"
 		self.newDir = None
+		self.speed = 3
 
 	def nextNode(self):
 		if(self.newDir != None):
