@@ -3,6 +3,7 @@ import pygame, sys
 from pygame.locals import *
 import random
 import time
+import re
  
 pygame.init()
  
@@ -207,17 +208,25 @@ class Obstacle(Element):
 		self.setPos(400,300)
 
 
+	
 
 enemies = []
 N_ENEMIES = 10
 for i in range(N_ENEMIES):
 	enemies.append(Enemy())
 
+mapFromAscii = False #para mapas feitos em https://textik.com/
 
 MAP = []
-f = open("map.txt")
+f = open("map_1.txt")
 lines = f.readlines()
+if('+' in lines[0]):
+	mapFromAscii = True
+
 for line in lines:
+	if mapFromAscii:	
+		line = re.sub(r"[^\s]", '1', line) #troca por '1' tudo que nao for espaco		                                   
+		line = line.replace(' ', '0') #troca ' ' por 0
 	row = []
 	l = list(line)
 	for c in l:
