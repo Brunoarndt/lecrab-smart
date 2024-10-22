@@ -55,151 +55,217 @@ class Element(pygame.sprite.Sprite):
 
  
 class Enemy(Element):
-	def __init__(self, img="crab.png"):
-		super().__init__(img) 		
-		self.direction = "DOWN"
-		self.counter = 0
-		self.counterMax = 50
-		self.setPos(32,32)
-		self.destNode = (1,1)
-		self.lastNode = (1,1)
+    def __init__(self, img="crab.png"):
+        super().__init__(img) 		
+        self.direction = "DOWN"
+        self.counter = 0
+        self.counterMax = 50
+        self.setPos(32,32)
+        self.destNode = (1,1)
+        self.lastNode = (1,1)
 
-		self.speed = random.randint(2,4) #pixels per frame
-		
-	def getNodePos(self):
-		return self.lastNode
+        self.speed = random.randint(2,4) #pixels per frame
+        
+    def getNodePos(self):
+        return self.lastNode
 
-	def isSafeNode(self, x, y):
-		if x < 0 or x >= len(MAP):
-			return False
-		if y < 0 or y >= len(MAP[0]):
-			return False
-		if(MAP[x][y] != 0): 
-			return False
-		return True
-	
-	def setNode(self, x, y):
-		self.lastNode = (x,y)
-		self.destNode = (x,y)
-		self.setPos(x*self.rect[2], y*self.rect[3])
-		
+    def isSafeNode(self, x, y):
+        """Verifica se o nó é seguro e não contém obstáculos"""
+        if x < 0 or x >= len(MAP):
+            return False
+        if y < 0 or y >= len(MAP[0]):
+            return False
+        if(MAP[x][y] != 0): 
+            return False
+        return True
+    
+    def setNode(self, x, y):
+        self.lastNode = (x, y)
+        self.destNode = (x, y)
+        self.setPos(x * self.rect[2], y * self.rect[3])
+    
+    def nextNode(self, player_pos):
+        """Escolhe o próximo nó baseado na posição do jogador, com verificação de obstáculos e contorno de paredes"""
+        px, py = player_pos
+        ex, ey = self.lastNode
 
-	def nextNode(self, dirs = ["UP", "DOWN", "LEFT", "RIGHT"]):
-			
-		if len(dirs) == 0:
-			return None
-		
-		if len(dirs) == 4 or True:
-			self.counter += 1
-			if self.counter > self.counterMax:
-				self.counter = 0
-				self.counterMax = random.randint(3,7)
-				self.direction = dirs[random.randint(0,len(dirs)-1)]
+        # Calcula a diferença entre a posição do inimigo e do jogador
+        dx = px - ex
+        dy = py - ey
 
-		mx = 0; my = 0;
-		newd = False
-		if(self.direction == "UP"):
-			if(self.isSafeNode(self.lastNode[0], self.lastNode[1]-1)):
-				return (self.lastNode[0], self.lastNode[1]-1)
-		if(self.direction == "DOWN"):
-			if(self.isSafeNode(self.lastNode[0], self.lastNode[1]+1)):
-				return (self.lastNode[0], self.lastNode[1]+1)
-		if(self.direction == "LEFT"):
-			if(self.isSafeNode(self.lastNode[0]-1, self.lastNode[1])):
-				return (self.lastNode[0]-1, self.lastNode[1])
-		if(self.direction == "RIGHT"):
-			if(self.isSafeNode(self.lastNode[0]+1, self.lastNode[1])):
-				return (self.lastNode[0]+1, self.lastNode[1])	
-			
-		self.direction = dirs[0]
-		n = self.nextNode(dirs[1:])
+        # Direções preferenciais para mover em direção ao jogador
+        preferred_directions = []
 
-		return n
- 
-	def update(self):
-			
-		mx = 0
-		my = 0	
+        if dx > 0:
+            preferred_directions.append("RIGHT")
+        elif dx < 0:
+            preferred_directions.append("LEFT")
 
-		if(self.destNode != None):
-			d = self.destNode[0]*32 - self.rect.center[0]
-			mx = d
-			d = self.destNode[1]*32 - self.rect.center[1]
-			my = d
+        if dy > 0:
+            preferred_directions.append("DOWN")
+        elif dy < 0:
+            preferred_directions.append("UP")
+
+        # Tenta mover na direção ideal
+        for direction in preferred_directions:
+            if direction == "UP" and self.isSafeNode(ex, ey - 1):
+                self.direction = "UP"  # Atualiza a direção
+                return (ex, ey - 1)
+            elif direction == "DOWN" and self.isSafeNode(ex, ey + 1):
+                self.direction = "DOWN"  # Atualiza a direção
+                return (ex, ey + 1)
+            elif direction == "LEFT" and self.isSafeNode(ex - 1, ey):
+                self.direction = "LEFT"  # Atualiza a direção
+                return (ex - 1, ey)
+            elif direction == "RIGHT" and self.isSafeNode(ex + 1, ey):
+                self.direction = "RIGHT"  # Atualiza a direção
+                return (ex + 1, ey)
+
+        # Se não puder seguir na direção ideal, ativa o comportamento de seguir a parede
+        return self.followWallUntilOpen(ex, ey)
+
+    def followWallUntilOpen(self, ex, ey):
+        """Seguir a parede até encontrar uma abertura no eixo oposto"""
+        
+        movement_axis = None
+        if self.direction == "UP" or self.direction == "DOWN":
+            movement_axis = 'Y'
+        elif self.direction == "LEFT" or self.direction == "RIGHT":
+            movement_axis = 'X'
+
+        # Seguir no eixo Y até encontrar uma abertura no eixo X
+        if movement_axis == 'Y':
+            while self.isSafeNode(ex, ey + 1) or self.isSafeNode(ex, ey - 1):
+                if self.isSafeNode(ex + 1, ey):  # Verifica se pode virar para a direita
+                    return (ex + 1, ey)
+                elif self.isSafeNode(ex - 1, ey):  # Verifica se pode virar para a esquerda
+                    return (ex - 1, ey)
+                # Move ao longo do eixo Y
+                ey += 1 if self.isSafeNode(ex, ey + 1) else -1  
+        # Seguir no eixo X até encontrar uma abertura no eixo Y
+        elif movement_axis == 'X':
+            while self.isSafeNode(ex + 1, ey) or self.isSafeNode(ex - 1, ey):
+                if self.isSafeNode(ex, ey + 1):  # Verifica se pode virar para baixo
+                    return (ex, ey + 1)
+                elif self.isSafeNode(ex, ey - 1):  # Verifica se pode virar para cima
+                    return (ex, ey - 1)
+                # Move ao longo do eixo X
+                ex += 1 if self.isSafeNode(ex + 1, ey) else -1  
+
+        return (ex, ey)  # Se não houver caminho possível
 
 
-		if(mx == 0 and my == 0):
-			self.destNode = self.nextNode()
-			if self.destNode == None:
-				return
-			else:
-				self.lastNode = self.destNode
-
-		mx = clamp(mx, -self.speed, self.speed)
-		my = clamp(my, -self.speed, self.speed)
 
 
-		self.rect.move_ip(mx,my)	
+
+
+    
+    def update(self, player_pos):
+        """Atualiza a posição do inimigo em direção ao jogador"""
+        mx = 0
+        my = 0
+
+        if self.destNode != None:
+            d = self.destNode[0] * 32 - self.rect.center[0]
+            mx = d
+            d = self.destNode[1] * 32 - self.rect.center[1]
+            my = d
+
+        if mx == 0 and my == 0:
+            self.destNode = self.nextNode(player_pos)
+            if self.destNode is None:
+                return
+            else:
+                self.lastNode = self.destNode
+
+        mx = clamp(mx, -self.speed, self.speed)
+        my = clamp(my, -self.speed, self.speed)
+
+        self.rect.move_ip(mx, my)
+
+
+
 		
 		
 	
 class Player(Enemy):
-	def __init__(self):
-		super().__init__("player.png") 
-		self.direction = "UP"
-		self.newDir = None
-		self.speed = 3
+    def __init__(self):
+        super().__init__("player.png") 
+        self.direction = "UP"
+        self.newDir = None
+        self.speed = 3
 
-	def nextNode(self):
-		if(self.newDir != None):
-			if(self.newDir == "UP"):
-				if(self.isSafeNode(self.lastNode[0], self.lastNode[1]-1)):
-					self.direction = self.newDir
-					self.newDir = None
-					return (self.lastNode[0], self.lastNode[1]-1)
-			if(self.newDir == "DOWN"):
-				if(self.isSafeNode(self.lastNode[0], self.lastNode[1]+1)):
-					self.direction = self.newDir
-					self.newDir = None
-					return (self.lastNode[0], self.lastNode[1]+1)
-			if(self.newDir == "LEFT"):
-				if(self.isSafeNode(self.lastNode[0]-1, self.lastNode[1])):
-					self.direction = self.newDir
-					self.newDir = None
-					return (self.lastNode[0]-1, self.lastNode[1])
-			if(self.newDir == "RIGHT"):
-				if(self.isSafeNode(self.lastNode[0]+1, self.lastNode[1])):
-					self.direction = self.newDir
-					self.newDir = None
-					return (self.lastNode[0]+1, self.lastNode[1])	
+    def nextNode(self):
+        if self.newDir is not None:
+            if self.newDir == "UP":
+                if self.isSafeNode(self.lastNode[0], self.lastNode[1]-1):
+                    self.direction = self.newDir
+                    self.newDir = None
+                    return (self.lastNode[0], self.lastNode[1]-1)
+            if self.newDir == "DOWN":
+                if self.isSafeNode(self.lastNode[0], self.lastNode[1]+1):
+                    self.direction = self.newDir
+                    self.newDir = None
+                    return (self.lastNode[0], self.lastNode[1]+1)
+            if self.newDir == "LEFT":
+                if self.isSafeNode(self.lastNode[0]-1, self.lastNode[1]):       
+                    self.direction = self.newDir
+                    self.newDir = None
+                    return (self.lastNode[0]-1, self.lastNode[1])
+            if self.newDir == "RIGHT":
+                if self.isSafeNode(self.lastNode[0]+1, self.lastNode[1]):
+                    self.direction = self.newDir
+                    self.newDir = None
+                    return (self.lastNode[0]+1, self.lastNode[1])	
+
+        if self.direction == "UP":
+            if self.isSafeNode(self.lastNode[0], self.lastNode[1]-1):
+                return (self.lastNode[0], self.lastNode[1]-1)
+        if self.direction == "DOWN":
+            if self.isSafeNode(self.lastNode[0], self.lastNode[1]+1):
+                return (self.lastNode[0], self.lastNode[1]+1)
+        if self.direction == "LEFT":
+            if self.isSafeNode(self.lastNode[0]-1, self.lastNode[1]):
+                return (self.lastNode[0]-1, self.lastNode[1])
+        if self.direction == "RIGHT":
+            if self.isSafeNode(self.lastNode[0]+1, self.lastNode[1]):
+                return (self.lastNode[0]+1, self.lastNode[1])	
 			
-		if(self.direction == "UP"):
-			if(self.isSafeNode(self.lastNode[0], self.lastNode[1]-1)):
-				return (self.lastNode[0], self.lastNode[1]-1)
-		if(self.direction == "DOWN"):
-			if(self.isSafeNode(self.lastNode[0], self.lastNode[1]+1)):
-				return (self.lastNode[0], self.lastNode[1]+1)
-		if(self.direction == "LEFT"):
-			if(self.isSafeNode(self.lastNode[0]-1, self.lastNode[1])):
-				return (self.lastNode[0]-1, self.lastNode[1])
-		if(self.direction == "RIGHT"):
-			if(self.isSafeNode(self.lastNode[0]+1, self.lastNode[1])):
-				return (self.lastNode[0]+1, self.lastNode[1])	
-			
-		return None
+        return None
 
-	def update(self):
-		pressed_keys = pygame.key.get_pressed()
-		if pressed_keys[K_UP]:
-			self.newDir = "UP"
-		elif pressed_keys[K_DOWN]:
-			self.newDir="DOWN"		 
-		if pressed_keys[K_LEFT]:
-			self.newDir = "LEFT"
-		if pressed_keys[K_RIGHT]:
-			self.newDir = "RIGHT"
+    def update(self):
+        pressed_keys = pygame.key.get_pressed()
+        if pressed_keys[K_UP]:
+            self.newDir = "UP"
+        elif pressed_keys[K_DOWN]:
+            self.newDir = "DOWN"		 
+        if pressed_keys[K_LEFT]:
+            self.newDir = "LEFT"
+        if pressed_keys[K_RIGHT]:
+            self.newDir = "RIGHT"
 
-		super().update()
+        # O código de movimentação continua como está
+        mx = 0
+        my = 0	
+
+        if self.destNode is not None:
+            d = self.destNode[0] * 32 - self.rect.center[0]
+            mx = d
+            d = self.destNode[1] * 32 - self.rect.center[1]
+            my = d
+
+        if mx == 0 and my == 0:
+            self.destNode = self.nextNode()
+            if self.destNode is None:
+                return
+            else:
+                self.lastNode = self.destNode
+
+        mx = clamp(mx, -self.speed, self.speed)
+        my = clamp(my, -self.speed, self.speed)
+
+        self.rect.move_ip(mx, my)
+
  
 
 class Obstacle(Element):
@@ -288,33 +354,35 @@ while i < len(MAP):
 
 elements = [P1] + enemies + obstacles
 
-pygame.mixer.music.load("sound.mp3")
-pygame.mixer.music.play(-1)
+#pygame.mixer.music.load("sound.mp3")
+#pygame.mixer.music.play(-1)
 
 while True:	 
-	for event in pygame.event.get():			  
-		if event.type == QUIT:
-			pygame.quit()
-			sys.exit()
- 
-	for e in elements:
-		e.update()
-	 
-	DISPLAYSURF.blit(background, (0,0))
+    for event in pygame.event.get():			  
+        if event.type == QUIT:
+            pygame.quit()
+            sys.exit()
 
-	for e in elements:
-		e.draw(DISPLAYSURF)
+    player_pos = P1.getNodePos()  # Posição atual do jogador
+    for e in elements:
+        if isinstance(e, Enemy) and not isinstance(e, Player):
+            e.update(player_pos)  # Passa a posição do jogador para os inimigos
+        else:
+            e.update()  # Atualiza o jogador sem passar a posição
 
-		
-	l = P1.getRect().collidelistall(enemies)
-	if(len(l) > 0):
-		time.sleep(2)
-		P1.setNode(px,py)
-		for i in range(N_ENEMIES):
-			enemies[i].setNode(1,1)
-	
-		 
-	pygame.display.update()
-	FramePerSec.tick(FPS)
+    DISPLAYSURF.blit(background, (0, 0))
+
+    for e in elements:
+        e.draw(DISPLAYSURF)
+
+    l = P1.getRect().collidelistall(enemies)
+    if len(l) > 0:
+        time.sleep(2)
+        P1.setNode(px, py)
+        for i in range(N_ENEMIES):
+            enemies[i].setNode(1, 1)
+
+    pygame.display.update()
+    FramePerSec.tick(FPS)
 
 
