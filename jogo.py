@@ -1,9 +1,9 @@
-
 import pygame, sys
 from pygame.locals import *
 import random
 import time
 import re
+
  
 pygame.init()
  
@@ -63,14 +63,14 @@ class Enemy(Element):
         self.setPos(32,32)
         self.destNode = (1,1)
         self.lastNode = (1,1)
-
+        self.position_history = []
+        self.max_history_length = 20
         self.speed = random.randint(2,4) #pixels per frame
         
     def getNodePos(self):
         return self.lastNode
 
     def isSafeNode(self, x, y):
-        """Verifica se o nó é seguro e não contém obstáculos"""
         if x < 0 or x >= len(MAP):
             return False
         if y < 0 or y >= len(MAP[0]):
@@ -83,17 +83,22 @@ class Enemy(Element):
         self.lastNode = (x, y)
         self.destNode = (x, y)
         self.setPos(x * self.rect[2], y * self.rect[3])
+
     
     def nextNode(self, player_pos):
-        """Escolhe o próximo nó baseado na posição do jogador, com verificação de obstáculos e contorno de paredes"""
+        """Choose the next node based on the player’s position, with obstacle check and deviation if stuck."""
         px, py = player_pos
         ex, ey = self.lastNode
 
-        # Calcula a diferença entre a posição do inimigo e do jogador
+        # Check if the enemy is in a loop
+        if self.isStuck(ex, ey):
+            return self.escapePath(ex, ey)
+
+
+        # Usual pathfinding logic to move towards the player
         dx = px - ex
         dy = py - ey
 
-        # Direções preferenciais para mover em direção ao jogador
         preferred_directions = []
 
         if dx > 0:
@@ -106,62 +111,82 @@ class Enemy(Element):
         elif dy < 0:
             preferred_directions.append("UP")
 
-        # Tenta mover na direção ideal
+        # Avoid returning to the previous position
+        preferred_directions = [d for d in preferred_directions if not self.isOppositeDirection(d, ex, ey)]
+
         for direction in preferred_directions:
             if direction == "UP" and self.isSafeNode(ex, ey - 1):
-                self.direction = "UP"  # Atualiza a direção
+                self.direction = "UP"
                 return (ex, ey - 1)
             elif direction == "DOWN" and self.isSafeNode(ex, ey + 1):
-                self.direction = "DOWN"  # Atualiza a direção
+                self.direction = "DOWN"
                 return (ex, ey + 1)
             elif direction == "LEFT" and self.isSafeNode(ex - 1, ey):
-                self.direction = "LEFT"  # Atualiza a direção
+                self.direction = "LEFT"
                 return (ex - 1, ey)
             elif direction == "RIGHT" and self.isSafeNode(ex + 1, ey):
-                self.direction = "RIGHT"  # Atualiza a direção
+                self.direction = "RIGHT"
                 return (ex + 1, ey)
 
-        # Se não puder seguir na direção ideal, ativa o comportamento de seguir a parede
-        return self.followWallUntilOpen(ex, ey)
+        return self.escapePath(ex, ey)
 
-    def followWallUntilOpen(self, ex, ey):
-        """Seguir a parede até encontrar uma abertura no eixo oposto"""
+    def isStuck(self, ex, ey):
+        # Add the current position to the history
+        self.position_history.append((ex, ey))
         
-        movement_axis = None
-        if self.direction == "UP" or self.direction == "DOWN":
-            movement_axis = 'Y'
-        elif self.direction == "LEFT" or self.direction == "RIGHT":
-            movement_axis = 'X'
+        # Limit the size of the history
+        if len(self.position_history) > self.max_history_length:
+            self.position_history.pop(0)
+        
+        # Check if the current position appears more than 3 times in the history, indicating that the enemy is stuck
+        if self.position_history.count((ex, ey)) > 3:
+            return True
+        return False
 
-        # Seguir no eixo Y até encontrar uma abertura no eixo X
-        if movement_axis == 'Y':
-            while self.isSafeNode(ex, ey + 1) or self.isSafeNode(ex, ey - 1):
-                if self.isSafeNode(ex + 1, ey):  # Verifica se pode virar para a direita
-                    return (ex + 1, ey)
-                elif self.isSafeNode(ex - 1, ey):  # Verifica se pode virar para a esquerda
-                    return (ex - 1, ey)
-                # Move ao longo do eixo Y
-                ey += 1 if self.isSafeNode(ex, ey + 1) else -1  
-        # Seguir no eixo X até encontrar uma abertura no eixo Y
-        elif movement_axis == 'X':
-            while self.isSafeNode(ex + 1, ey) or self.isSafeNode(ex - 1, ey):
-                if self.isSafeNode(ex, ey + 1):  # Verifica se pode virar para baixo
-                    return (ex, ey + 1)
-                elif self.isSafeNode(ex, ey - 1):  # Verifica se pode virar para cima
-                    return (ex, ey - 1)
-                # Move ao longo do eixo X
-                ex += 1 if self.isSafeNode(ex + 1, ey) else -1  
+    def isOppositeDirection(self, direction, ex, ey):
+            """Check if the direction is opposite to the previous direction."""
+            if self.direction == "UP" and direction == "DOWN":
+                return True
+            elif self.direction == "DOWN" and direction == "UP":
+                return True
+            elif self.direction == "LEFT" and direction == "RIGHT":
+                return True
+            elif self.direction == "RIGHT" and direction == "LEFT":
+                return True
+            return False
 
-        return (ex, ey)  # Se não houver caminho possível
+    def escapePath(self, ex, ey):
+        """Find an alternative path when stuck, avoiding recently visited positions."""
+        # Define the possible directions to move (UP, DOWN, LEFT, RIGHT)
+        directions = [("UP", (ex, ey - 1)),
+                    ("DOWN", (ex, ey + 1)),
+                    ("LEFT", (ex - 1, ey)),
+                    ("RIGHT", (ex + 1, ey))]
+        
+        # Filter the directions that are safe (no obstacles) and have not been visited recently
+        safe_directions = []
+        for direction, (nx, ny) in directions:
+            if self.isSafeNode(nx, ny) and (nx, ny) not in self.position_history:
+                safe_directions.append((direction, (nx, ny)))
+
+        # If there are safe directions that have not been visited recently, choose the first available
+        if safe_directions:
+            chosen_direction, next_node = random.choice(safe_directions)
+            self.direction = chosen_direction  # Update the enemy's direction
+            return next_node
+
+        # If all directions have been visited recently, choose the first safe one (even if already visited)
+        for direction, (nx, ny) in directions:
+            if self.isSafeNode(nx, ny):
+                self.direction = direction  # Update the enemy's direction
+                return (nx, ny)
+
+        # If no options are available, return the current position (avoids a return error)
+        return (ex, ey)
 
 
 
-
-
-
-    
     def update(self, player_pos):
-        """Atualiza a posição do inimigo em direção ao jogador"""
         mx = 0
         my = 0
 
@@ -183,11 +208,6 @@ class Enemy(Element):
 
         self.rect.move_ip(mx, my)
 
-
-
-		
-		
-	
 class Player(Enemy):
     def __init__(self):
         super().__init__("player.png") 
@@ -244,7 +264,6 @@ class Player(Enemy):
         if pressed_keys[K_RIGHT]:
             self.newDir = "RIGHT"
 
-        # O código de movimentação continua como está
         mx = 0
         my = 0	
 
@@ -277,7 +296,7 @@ class Obstacle(Element):
 	
 
 enemies = []
-N_ENEMIES = 10
+N_ENEMIES = 5
 for i in range(N_ENEMIES):
 	enemies.append(Enemy())
 
@@ -357,18 +376,35 @@ elements = [P1] + enemies + obstacles
 #pygame.mixer.music.load("sound.mp3")
 #pygame.mixer.music.play(-1)
 
+paused = False
+
 while True:	 
     for event in pygame.event.get():			  
         if event.type == QUIT:
             pygame.quit()
             sys.exit()
 
-    player_pos = P1.getNodePos()  # Posição atual do jogador
+        # Check if the ESC key was pressed
+    if event.type == pygame.KEYDOWN:
+        if event.key == pygame.K_ESCAPE:
+            paused = not paused  # Toggle the pause state
+
+    # If the game is paused, do not update the game logic
+    if paused:
+        # Display pause message on the screen, if desired
+        font = pygame.font.Font(None, 36)
+        text = font.render("Game Paused. Press ESC to resume.", True, (255, 255, 255))
+        DISPLAYSURF.blit(text, (200, 250))
+        pygame.display.flip()
+        continue
+
+    player_pos = P1.getNodePos()  # Current position of the player
     for e in elements:
         if isinstance(e, Enemy) and not isinstance(e, Player):
-            e.update(player_pos)  # Passa a posição do jogador para os inimigos
+            e.update(player_pos)  # Pass the player's position to the enemies
         else:
-            e.update()  # Atualiza o jogador sem passar a posição
+            e.update()  # Update the player without passing the position
+
 
     DISPLAYSURF.blit(background, (0, 0))
 
